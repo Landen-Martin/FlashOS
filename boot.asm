@@ -1,45 +1,32 @@
+; boot.asm
 [org 0x7c00]
 bits 16
 
 start:
-    ; Set up segment registers and stack
     xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
     mov sp, 0x7c00
 
-    ; Clear the screen
-    mov ah, 0x06
-    xor al, al
-    mov bh, 0x07
-    mov cx, 0
-    mov dx, 0x184f
-    int 0x10
-    mov ah, 0x02
-    mov bh, 0
-    mov dx, 0
-    int 0x10
-
-    ; Load the kernel into memory at 0x0000:0x7E00
+    ; read 2 sectors (init and main) starting from LBA 1 into 0x7E00
     mov bx, 0x0000
     mov es, bx
-    mov bx, 0x7E00          ; ES:BX = target address
-    mov ah, 0x02            ; BIOS read sectors function
-    mov al, 1               ; number of sectors to read (adjust if kernel grows)
-    mov ch, 0               ; cylinder 0
-    mov cl, 2               ; sector number (LBA 1 - CHS: cylinder 0, head 0, sector 2)
-    mov dh, 0               ; head 0
+    mov bx, 0x7E00      ; ES:BX = 0x0000:0x7E00
+    mov ah, 0x02        ; read sectors
+    mov al, 2           ; read 2 sectors
+    mov ch, 0           ; cylinder 0
+    mov cl, 2           ; sector 2 (LBA 1 -> CHS: cylinder 0, head 0, sector 2)
+    mov dh, 0           ; head 0
 
-    ; DL already contains the boot drive number (passed by BIOS) - we keep it
+    ; DL already contains boot drive
     int 0x13
-    jc error           ; if carry set, error
+    jc disk_error
 
-    ; Jump to the loaded kernel
+    ; jump to init at 0x7E00
     jmp 0x0000:0x7E00
 
-; disk error
-error:
+disk_error:
     mov si, err_msg
     call print
     cli
@@ -58,7 +45,5 @@ print:
     ret
 
 err_msg db "Disk read error!", 0
-
-; Boot sector signature
 times 510 - ($ - $$) db 0
 dw 0xaa55
