@@ -1,44 +1,64 @@
 [org 0x7c00]
+bits 16
 
-; Set up segment registers and stack
-xor ax, ax
-mov ds, ax
-mov es, ax
-mov ss, ax
-mov sp, 0x7c00
+start:
+    ; Set up segment registers and stack
+    xor ax, ax
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov sp, 0x7c00
 
-; 1. Clear the screen
-clear_screen:
-    mov ah, 0x06        ; scroll up
-    mov al, 0           ; number of lines to scroll (0 = clear entire window)
-    mov bh, 0x07        ; attribute (light grey on black)
-    mov cx, 0           ; upper-left corner (row=0, col=0)
-    mov dx, 0x184f      ; lower-right corner (row=24, col=79) for 80x25 text mode
+    ; Clear the screen
+    mov ah, 0x06
+    xor al, al
+    mov bh, 0x07
+    mov cx, 0
+    mov dx, 0x184f
     int 0x10
-
-    ; (Optional) Set cursor to top-left (row=0, col=0)
     mov ah, 0x02
-    mov bh, 0           ; page 0
-    mov dx, 0           ; DH=row, DL=col
+    mov bh, 0
+    mov dx, 0
     int 0x10
 
-; 2. Print the message using teletype output
-mov si, msg
-print_loop:
-    lodsb
-    test al, al
-    jz done
-    mov ah, 0x0e
-    int 0x10
-    jmp print_loop
+    ; Load the kernel into memory at 0x0000:0x7E00
+    mov bx, 0x0000
+    mov es, bx
+    mov bx, 0x7E00          ; ES:BX = target address
+    mov ah, 0x02            ; BIOS read sectors function
+    mov al, 1               ; number of sectors to read (adjust if kernel grows)
+    mov ch, 0               ; cylinder 0
+    mov cl, 2               ; sector number (LBA 1 - CHS: cylinder 0, head 0, sector 2)
+    mov dh, 0               ; head 0
 
-done:
+    ; DL already contains the boot drive number (passed by BIOS) - we keep it
+    int 0x13
+    jc error           ; if carry set, error
+
+    ; Jump to the loaded kernel
+    jmp 0x0000:0x7E00
+
+; disk error
+error:
+    mov si, err_msg
+    call print
     cli
     hlt
-    jmp done
+    jmp $
 
-msg db "Hello, World!", 0
+print:
+    lodsb
+    test al, al
+    jz .done
+    mov ah, 0x0e
+    int 0x10
+    jmp print
 
-; Boot signature
+.done:
+    ret
+
+err_msg db "Disk read error!", 0
+
+; Boot sector signature
 times 510 - ($ - $$) db 0
 dw 0xaa55
